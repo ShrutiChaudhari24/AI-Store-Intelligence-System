@@ -1,51 +1,74 @@
-/**
- * useWebSocket Hook
- * TODO: Implement custom hook for WebSocket connections
- */
-
-import { useEffect, useState, useCallback } from 'react'
-
-interface UseWebSocketOptions {
-  url: string
-  onMessage?: (data: unknown) => void
-  onError?: (error: Event) => void
-  reconnectInterval?: number
-  maxReconnectAttempts?: number
-}
+import { useEffect, useState, useCallback, useRef } from 'react';
 
 interface UseWebSocketResult {
-  connected: boolean
-  send: (data: unknown) => void
-  close: () => void
+  connected: boolean;
+  send: (data: unknown) => void;
+  close: () => void;
+  subscribe: (channel: string, callback: (data: any) => void) => void;
 }
 
-export const useWebSocket = ({
-  url,
-  onMessage,
-  onError,
-  reconnectInterval = 3000,
-  maxReconnectAttempts = 5,
-}: UseWebSocketOptions): UseWebSocketResult => {
-  const [connected, setConnected] = useState(false)
-  const [ws, setWs] = useState<WebSocket | null>(null)
-  const [reconnectCount, setReconnectCount] = useState(0)
+export const useWebSocket = (): UseWebSocketResult | null => {
+  const [connected, setConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const subscribersRef = useRef<Map<string, (data: any) => void>>(new Map());
 
   useEffect(() => {
-    // TODO: Implement WebSocket connection logic
-    console.log('TODO: Implement WebSocket connection', url)
-    // TODO: Setup event listeners (open, message, close, error)
-    // TODO: Implement reconnection logic
-  }, [url])
+    try {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const url = `${protocol}//${window.location.host}/ws`;
+      
+      const ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        setConnected(true);
+        wsRef.current = ws;
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const channel = data.channel || 'default';
+          const callback = subscribersRef.current.get(channel);
+          if (callback) {
+            callback(data);
+          }
+        } catch (err) {
+          console.error('Failed to parse WebSocket message:', err);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+
+      ws.onclose = () => {
+        setConnected(false);
+        wsRef.current = null;
+      };
+
+      return () => {
+        ws.close();
+      };
+    } catch (err) {
+      console.error('Failed to connect WebSocket:', err);
+      return undefined;
+    }
+  }, []);
 
   const send = useCallback((data: unknown) => {
-    if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(data))
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(data));
     }
-  }, [ws])
+  }, []);
 
   const close = useCallback(() => {
-    ws?.close()
-  }, [ws])
+    wsRef.current?.close();
+  }, []);
 
-  return { connected, send, close }
+  const subscribe = useCallback((channel: string, callback: (data: any) => void) => {
+    subscribersRef.current.set(channel, callback);
+  }, []);
+
+  return { connected, send, close, subscribe };
+};
 }

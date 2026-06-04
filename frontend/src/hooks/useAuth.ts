@@ -1,5 +1,10 @@
-/**
- * useAuth Hook - Re-export from auth feature
- */
+import { useContext } from 'react';
+import { AuthContext } from '../context/AuthContext';
 
-export { useAuth } from '@features/auth'
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+  return context;
+};
